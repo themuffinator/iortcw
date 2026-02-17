@@ -60,6 +60,12 @@ cvar_t *r_allowSoftwareGL; // Don't abort out if a hardware visual can't be obta
 cvar_t *r_allowResize; // make window resizable
 cvar_t *r_centerWindow;
 cvar_t *r_sdlDriver;
+cvar_t *r_displayIndex;
+cvar_t *r_fullscreenDesktop;
+cvar_t *r_useWindowPosition;
+cvar_t *r_windowX;
+cvar_t *r_windowY;
+cvar_t *r_availableDisplays;
 
 int qglMajorVersion, qglMinorVersion;
 int qglesMajorVersion, qglesMinorVersion;
@@ -146,6 +152,219 @@ static int GLimp_CompareModes( const void *a, const void *b )
 		return -1;
 	else
 		return areaA - areaB;
+}
+
+/*
+===============
+GLimp_LogAvailableDisplays
+===============
+*/
+static void GLimp_LogAvailableDisplays( void )
+{
+	int i;
+	int numDisplays = 0;
+	char buf[ MAX_STRING_CHARS ] = { 0 };
+	SDL_DisplayID *displays = SDL_GetDisplays( &numDisplays );
+
+	if( displays == NULL || numDisplays <= 0 )
+	{
+		ri.Printf( PRINT_WARNING, "Couldn't get display list: %s\n", SDL_GetError() );
+		ri.Cvar_Set( "r_availableDisplays", "" );
+		return;
+	}
+
+	for( i = 0; i < numDisplays; i++ )
+	{
+		const char *displayName = SDL_GetDisplayName( displays[ i ] );
+		const char *displayString = va( "%d:%s ",
+				i, ( displayName != NULL && *displayName ) ? displayName : "unknown" );
+
+		if( strlen( displayString ) < (int)sizeof( buf ) - strlen( buf ) )
+			Q_strcat( buf, sizeof( buf ), displayString );
+		else
+			ri.Printf( PRINT_WARNING, "Skipping display %d, buffer too small\n", i );
+	}
+
+	if( *buf )
+	{
+		buf[ strlen( buf ) - 1 ] = 0;
+	}
+
+	ri.Printf( PRINT_ALL, "Available displays: '%s'\n", *buf ? buf : "" );
+	ri.Cvar_Set( "r_availableDisplays", buf );
+
+	SDL_free( displays );
+}
+
+/*
+===============
+GLimp_GetDisplayIndexForID
+===============
+*/
+static int GLimp_GetDisplayIndexForID( SDL_DisplayID display )
+{
+	int i;
+	int numDisplays = 0;
+	int displayIndex = 0;
+	SDL_DisplayID *displays = SDL_GetDisplays( &numDisplays );
+
+	if( displays == NULL || numDisplays <= 0 || display == 0 )
+	{
+		if( displays != NULL )
+			SDL_free( displays );
+		return 0;
+	}
+
+	for( i = 0; i < numDisplays; i++ )
+	{
+		if( displays[ i ] == display )
+		{
+			displayIndex = i;
+			break;
+		}
+	}
+
+	SDL_free( displays );
+	return displayIndex;
+}
+
+/*
+===============
+GLimp_GetPreferredDisplay
+===============
+*/
+static SDL_DisplayID GLimp_GetPreferredDisplay( int *displayIndexOut )
+{
+	SDL_DisplayID display = 0;
+	int displayIndex = 0;
+	int requestedDisplayIndex = r_displayIndex ? r_displayIndex->integer : -1;
+
+	if( requestedDisplayIndex >= 0 )
+	{
+		int numDisplays = 0;
+		SDL_DisplayID *displays = SDL_GetDisplays( &numDisplays );
+
+		if( displays != NULL && numDisplays > 0 )
+		{
+			if( requestedDisplayIndex < numDisplays )
+			{
+				display = displays[ requestedDisplayIndex ];
+				displayIndex = requestedDisplayIndex;
+			}
+			else
+			{
+				ri.Printf( PRINT_WARNING, "r_displayIndex %d is out of range [0,%d], using primary display\n",
+						requestedDisplayIndex, numDisplays - 1 );
+			}
+			SDL_free( displays );
+		}
+		else
+		{
+			ri.Printf( PRINT_WARNING, "Couldn't query displays for r_displayIndex: %s\n", SDL_GetError() );
+		}
+	}
+
+	if( display == 0 && SDL_window != NULL )
+	{
+		display = SDL_GetDisplayForWindow( SDL_window );
+		if( display != 0 )
+			displayIndex = GLimp_GetDisplayIndexForID( display );
+	}
+
+	if( display == 0 )
+	{
+		display = SDL_GetPrimaryDisplay();
+		if( display != 0 )
+			displayIndex = GLimp_GetDisplayIndexForID( display );
+	}
+
+	if( displayIndexOut != NULL )
+		*displayIndexOut = displayIndex;
+
+	return display;
+}
+
+/*
+===============
+GLimp_ResolveWindowPosition
+===============
+*/
+static void GLimp_ResolveWindowPosition( SDL_DisplayID display, int displayIndex, qboolean fullscreen, int *x, int *y )
+{
+	int resolvedX = SDL_WINDOWPOS_UNDEFINED;
+	int resolvedY = SDL_WINDOWPOS_UNDEFINED;
+
+	if( !fullscreen )
+	{
+		if( r_useWindowPosition != NULL && r_useWindowPosition->integer )
+		{
+			resolvedX = r_windowX->integer;
+			resolvedY = r_windowY->integer;
+		}
+		else if( r_centerWindow->integer )
+		{
+			SDL_Rect usableBounds;
+			if( display != 0 && SDL_GetDisplayUsableBounds( display, &usableBounds ) )
+			{
+				resolvedX = usableBounds.x + ( usableBounds.w - glConfig.vidWidth ) / 2;
+				resolvedY = usableBounds.y + ( usableBounds.h - glConfig.vidHeight ) / 2;
+			}
+		}
+		else if( SDL_window != NULL )
+		{
+			int oldX, oldY;
+			if( SDL_GetWindowPosition( SDL_window, &oldX, &oldY ) )
+			{
+				resolvedX = oldX;
+				resolvedY = oldY;
+			}
+		}
+	}
+
+	if( resolvedX == SDL_WINDOWPOS_UNDEFINED || resolvedY == SDL_WINDOWPOS_UNDEFINED )
+	{
+		if( displayIndex >= 0 )
+		{
+			resolvedX = SDL_WINDOWPOS_CENTERED_DISPLAY( displayIndex );
+			resolvedY = SDL_WINDOWPOS_CENTERED_DISPLAY( displayIndex );
+		}
+		else
+		{
+			resolvedX = SDL_WINDOWPOS_CENTERED;
+			resolvedY = SDL_WINDOWPOS_CENTERED;
+		}
+	}
+
+	*x = resolvedX;
+	*y = resolvedY;
+}
+
+/*
+===============
+GLimp_CreateWindow
+===============
+*/
+static SDL_Window *GLimp_CreateWindow( SDL_WindowFlags flags, int x, int y )
+{
+	SDL_PropertiesID props = SDL_CreateProperties();
+	SDL_Window *window = NULL;
+
+	if( props == 0 )
+	{
+		ri.Printf( PRINT_DEVELOPER, "SDL_CreateProperties failed: %s\n", SDL_GetError() );
+		return NULL;
+	}
+
+	SDL_SetStringProperty( props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, CLIENT_WINDOW_TITLE );
+	SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_X_NUMBER, x );
+	SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, y );
+	SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, glConfig.vidWidth );
+	SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, glConfig.vidHeight );
+	SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, (Sint64)flags );
+
+	window = SDL_CreateWindowWithProperties( props );
+	SDL_DestroyProperties( props );
+	return window;
 }
 
 
@@ -469,9 +688,10 @@ static int GLimp_SetMode(int mode, qboolean fullscreen, qboolean noborder, qbool
 	int samples;
 	int i = 0;
 	SDL_Surface *icon = NULL;
-	Uint32 flags = SDL_WINDOW_OPENGL;
+	SDL_WindowFlags flags = SDL_WINDOW_OPENGL;
 	SDL_DisplayMode desktopMode;
 	SDL_DisplayID display = 0;
+	int displayIndex = 0;
 	int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
 
 	ri.Printf( PRINT_ALL, "Initializing OpenGL display\n");
@@ -491,20 +711,7 @@ static int GLimp_SetMode(int mode, qboolean fullscreen, qboolean noborder, qbool
 
 	Com_Memset( &desktopMode, 0, sizeof( desktopMode ) );
 
-	// If a window exists, note its display ID
-	if( SDL_window != NULL )
-	{
-		display = SDL_GetDisplayForWindow( SDL_window );
-		if( display == 0 )
-		{
-			ri.Printf( PRINT_DEVELOPER, "SDL_GetDisplayForWindow() failed: %s\n", SDL_GetError() );
-		}
-	}
-
-	if( display == 0 )
-	{
-		display = SDL_GetPrimaryDisplay();
-	}
+	display = GLimp_GetPreferredDisplay( &displayIndex );
 
 	{
 		const SDL_DisplayMode *desktopModePtr = NULL;
@@ -558,12 +765,7 @@ static int GLimp_SetMode(int mode, qboolean fullscreen, qboolean noborder, qbool
 	}
 	ri.Printf( PRINT_ALL, " %d %d\n", glConfig.vidWidth, glConfig.vidHeight);
 
-	// Center window
-	if( r_centerWindow->integer && !fullscreen )
-	{
-		x = ( desktopMode.w / 2 ) - ( glConfig.vidWidth / 2 );
-		y = ( desktopMode.h / 2 ) - ( glConfig.vidHeight / 2 );
-	}
+	GLimp_ResolveWindowPosition( display, displayIndex, fullscreen, &x, &y );
 
 	// Destroy existing state if it exists
 	if( SDL_glContext != NULL )
@@ -575,15 +777,15 @@ static int GLimp_SetMode(int mode, qboolean fullscreen, qboolean noborder, qbool
 
 	if( SDL_window != NULL )
 	{
-		SDL_GetWindowPosition( SDL_window, &x, &y );
-		ri.Printf( PRINT_DEVELOPER, "Existing window at %dx%d before being destroyed\n", x, y );
+		int oldX = 0, oldY = 0;
+		if( SDL_GetWindowPosition( SDL_window, &oldX, &oldY ) )
+			ri.Printf( PRINT_DEVELOPER, "Existing window at %dx%d before being destroyed\n", oldX, oldY );
 		SDL_DestroyWindow( SDL_window );
 		SDL_window = NULL;
 	}
 
 	if( fullscreen )
 	{
-		flags |= SDL_WINDOW_FULLSCREEN;
 		glConfig.isFullscreen = qtrue;
 	}
 	else
@@ -710,38 +912,104 @@ static int GLimp_SetMode(int mode, qboolean fullscreen, qboolean noborder, qbool
 			SDL_GL_SetAttribute( SDL_GL_ACCELERATED_VISUAL, 1 );
 #endif
 
-		if( ( SDL_window = SDL_CreateWindow( CLIENT_WINDOW_TITLE,
-				glConfig.vidWidth, glConfig.vidHeight, flags ) ) == NULL )
+		if( ( SDL_window = GLimp_CreateWindow( flags, x, y ) ) == NULL )
 		{
-			ri.Printf( PRINT_DEVELOPER, "SDL_CreateWindow failed: %s\n", SDL_GetError( ) );
+			ri.Printf( PRINT_DEVELOPER, "GLimp_CreateWindow failed: %s\n", SDL_GetError( ) );
 			continue;
 		}
 
 		if( !fullscreen )
 		{
-			SDL_SetWindowPosition( SDL_window, x, y );
+			if( !SDL_SyncWindow( SDL_window ) )
+			{
+				ri.Printf( PRINT_DEVELOPER, "SDL_SyncWindow failed for windowed mode: %s\n", SDL_GetError( ) );
+			}
+
+			if( SDL_GetWindowPosition( SDL_window, &x, &y ) )
+			{
+				ri.Cvar_SetValue( "r_windowPosx", x );
+				ri.Cvar_SetValue( "r_windowPosy", y );
+			}
 		}
 
 		if( fullscreen )
 		{
-			SDL_DisplayMode mode;
-			Com_Memset( &mode, 0, sizeof( mode ) );
+			SDL_DisplayID fullscreenDisplay = SDL_GetDisplayForWindow( SDL_window );
+			float requestedRefresh = (float)ri.Cvar_VariableIntegerValue( "r_displayRefresh" );
 
-			switch( testColorBits )
+			if( fullscreenDisplay == 0 )
+				fullscreenDisplay = display;
+
+			if( r_fullscreenDesktop->integer )
 			{
-				case 16: mode.format = SDL_PIXELFORMAT_RGB565; break;
-				case 24: mode.format = SDL_PIXELFORMAT_RGB24;  break;
-				default: ri.Printf( PRINT_DEVELOPER, "testColorBits is %d, can't fullscreen\n", testColorBits ); continue;
+				glConfig.displayFrequency = 0;
+
+				if( !SDL_SetWindowFullscreenMode( SDL_window, NULL ) )
+				{
+					ri.Printf( PRINT_DEVELOPER, "SDL_SetWindowFullscreenMode(NULL) failed: %s\n", SDL_GetError( ) );
+					SDL_DestroyWindow( SDL_window );
+					SDL_window = NULL;
+					continue;
+				}
+			}
+			else
+			{
+				SDL_DisplayMode fullscreenMode;
+				Com_Memset( &fullscreenMode, 0, sizeof( fullscreenMode ) );
+
+				if( !SDL_GetClosestFullscreenDisplayMode( fullscreenDisplay,
+						glConfig.vidWidth, glConfig.vidHeight, requestedRefresh, false, &fullscreenMode ) )
+				{
+					if( requestedRefresh > 0.0f &&
+						SDL_GetClosestFullscreenDisplayMode( fullscreenDisplay,
+							glConfig.vidWidth, glConfig.vidHeight, 0.0f, false, &fullscreenMode ) )
+					{
+						ri.Printf( PRINT_DEVELOPER, "Requested refresh %.2f unavailable, using %.2f\n",
+								requestedRefresh, fullscreenMode.refresh_rate );
+					}
+					else
+					{
+						ri.Printf( PRINT_DEVELOPER, "Couldn't find a fullscreen mode near %dx%d@%.2f\n",
+								glConfig.vidWidth, glConfig.vidHeight, requestedRefresh );
+						SDL_DestroyWindow( SDL_window );
+						SDL_window = NULL;
+						continue;
+					}
+				}
+
+				glConfig.displayFrequency = (int)fullscreenMode.refresh_rate;
+
+				if( !SDL_SetWindowFullscreenMode( SDL_window, &fullscreenMode ) )
+				{
+					ri.Printf( PRINT_DEVELOPER, "SDL_SetWindowFullscreenMode failed: %s\n", SDL_GetError( ) );
+					SDL_DestroyWindow( SDL_window );
+					SDL_window = NULL;
+					continue;
+				}
 			}
 
-			mode.w = glConfig.vidWidth;
-			mode.h = glConfig.vidHeight;
-			mode.refresh_rate = (float)( glConfig.displayFrequency = ri.Cvar_VariableIntegerValue( "r_displayRefresh" ) );
-
-			if( !SDL_SetWindowFullscreenMode( SDL_window, &mode ) )
+			if( !SDL_SetWindowFullscreen( SDL_window, true ) )
 			{
-				ri.Printf( PRINT_DEVELOPER, "SDL_SetWindowFullscreenMode failed: %s\n", SDL_GetError( ) );
+				ri.Printf( PRINT_DEVELOPER, "SDL_SetWindowFullscreen failed: %s\n", SDL_GetError( ) );
+				SDL_DestroyWindow( SDL_window );
+				SDL_window = NULL;
 				continue;
+			}
+
+			if( !SDL_SyncWindow( SDL_window ) )
+			{
+				ri.Printf( PRINT_DEVELOPER, "SDL_SyncWindow failed for fullscreen mode: %s\n", SDL_GetError( ) );
+			}
+		}
+
+		{
+			int windowWidth, windowHeight;
+			if( SDL_GetWindowSizeInPixels( SDL_window, &windowWidth, &windowHeight ) &&
+				windowWidth > 0 && windowHeight > 0 )
+			{
+				glConfig.vidWidth = windowWidth;
+				glConfig.vidHeight = windowHeight;
+				glConfig.windowAspect = (float)windowWidth / (float)windowHeight;
 			}
 		}
 
@@ -898,6 +1166,8 @@ static qboolean GLimp_StartDriverAndSetMode(int mode, qboolean fullscreen, qbool
 		ri.Printf( PRINT_ALL, "SDL using driver \"%s\"\n", driverName );
 		ri.Cvar_Set( "r_sdlDriver", driverName );
 	}
+
+	GLimp_LogAvailableDisplays();
 
 	if (fullscreen && ri.Cvar_VariableIntegerValue( "in_nograb" ) )
 	{
@@ -1149,12 +1419,22 @@ void GLimp_Init( qboolean fixedFunction )
 	r_sdlDriver = ri.Cvar_Get( "r_sdlDriver", "", CVAR_ROM );
 	r_allowResize = ri.Cvar_Get( "r_allowResize", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_centerWindow = ri.Cvar_Get( "r_centerWindow", "0", CVAR_ARCHIVE | CVAR_LATCH );
+	r_displayIndex = ri.Cvar_Get( "r_displayIndex", "-1", CVAR_ARCHIVE | CVAR_LATCH );
+	r_fullscreenDesktop = ri.Cvar_Get( "r_fullscreenDesktop", "1", CVAR_ARCHIVE | CVAR_LATCH );
+	r_useWindowPosition = ri.Cvar_Get( "r_useWindowPosition", "0", CVAR_ARCHIVE | CVAR_LATCH );
+	r_windowX = ri.Cvar_Get( "r_windowPosx", "0", CVAR_ARCHIVE | CVAR_LATCH );
+	r_windowY = ri.Cvar_Get( "r_windowPosy", "0", CVAR_ARCHIVE | CVAR_LATCH );
+	r_availableDisplays = ri.Cvar_Get( "r_availableDisplays", "", CVAR_ROM );
+
+	ri.Cvar_CheckRange( r_fullscreenDesktop, 0, 1, qtrue );
+	ri.Cvar_CheckRange( r_useWindowPosition, 0, 1, qtrue );
 
 	if( ri.Cvar_VariableIntegerValue( "com_abnormalExit" ) )
 	{
 		ri.Cvar_Set( "r_mode", va( "%d", R_MODE_FALLBACK ) );
 		ri.Cvar_Set( "r_fullscreen", "0" );
 		ri.Cvar_Set( "r_centerWindow", "0" );
+		ri.Cvar_Set( "r_useWindowPosition", "0" );
 		ri.Cvar_Set( "com_abnormalExit", "0" );
 	}
 
