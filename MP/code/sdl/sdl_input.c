@@ -20,11 +20,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 
-#ifdef USE_LOCAL_HEADERS
-#	include "SDL.h"
-#else
-#	include <SDL.h>
-#endif
+#include <SDL3/SDL.h>
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -61,12 +57,19 @@ static SDL_Window *SDL_window = NULL;
 
 #define CTRL(a) ((a)-'a'+1)
 
+typedef struct
+{
+	SDL_Scancode scancode;
+	SDL_Keycode sym;
+	SDL_Keymod mod;
+} iortcw_keysym_t;
+
 /*
 ===============
 IN_PrintKey
 ===============
 */
-static void IN_PrintKey( const SDL_Keysym *keysym, keyNum_t key, qboolean down )
+static void IN_PrintKey( const iortcw_keysym_t *keysym, keyNum_t key, qboolean down )
 {
 	if( down )
 		Com_Printf( "+ " );
@@ -193,7 +196,7 @@ static qboolean IN_IsConsoleKey( keyNum_t key, int character )
 IN_TranslateSDLToQ3Key
 ===============
 */
-static keyNum_t IN_TranslateSDLToQ3Key( SDL_Keysym *keysym, qboolean down )
+static keyNum_t IN_TranslateSDLToQ3Key( iortcw_keysym_t *keysym, qboolean down )
 {
 	keyNum_t key = 0;
 
@@ -352,8 +355,8 @@ static void IN_ActivateMouse( qboolean isFullscreen )
 
 	if( !mouseActive )
 	{
-		SDL_SetRelativeMouseMode( SDL_TRUE );
-		SDL_SetWindowGrab( SDL_window, SDL_TRUE );
+		SDL_SetWindowRelativeMouseMode( SDL_window, true );
+		SDL_SetWindowMouseGrab( SDL_window, true );
 
 		IN_GobbleMotionEvents( );
 	}
@@ -364,11 +367,11 @@ static void IN_ActivateMouse( qboolean isFullscreen )
 		if( in_nograb->modified || !mouseActive )
 		{
 			if( in_nograb->integer ) {
-				SDL_SetRelativeMouseMode( SDL_FALSE );
-				SDL_SetWindowGrab( SDL_window, SDL_FALSE );
+				SDL_SetWindowRelativeMouseMode( SDL_window, false );
+				SDL_SetWindowMouseGrab( SDL_window, false );
 			} else {
-				SDL_SetRelativeMouseMode( SDL_TRUE );
-				SDL_SetWindowGrab( SDL_window, SDL_TRUE );
+				SDL_SetWindowRelativeMouseMode( SDL_window, true );
+				SDL_SetWindowMouseGrab( SDL_window, true );
 			}
 
 			in_nograb->modified = qfalse;
@@ -391,7 +394,7 @@ static void IN_DeactivateMouse( qboolean isFullscreen )
 	// Always show the cursor when the mouse is disabled,
 	// but not when fullscreen
 	if( !isFullscreen )
-		SDL_ShowCursor( SDL_TRUE );
+		SDL_ShowCursor( );
 
 	if( !mouseAvailable )
 		return;
@@ -400,8 +403,8 @@ static void IN_DeactivateMouse( qboolean isFullscreen )
 	{
 		IN_GobbleMotionEvents( );
 
-		SDL_SetWindowGrab( SDL_window, SDL_FALSE );
-		SDL_SetRelativeMouseMode( SDL_FALSE );
+		SDL_SetWindowMouseGrab( SDL_window, false );
+		SDL_SetWindowRelativeMouseMode( SDL_window, false );
 
 		// Don't warp the mouse unless the cursor is within the window
 		if( SDL_GetWindowFlags( SDL_window ) & SDL_WINDOW_MOUSE_FOCUS )
@@ -455,6 +458,7 @@ static void IN_InitJoystick( void )
 {
 	int i = 0;
 	int total = 0;
+	SDL_JoystickID *joysticks = NULL;
 	char buf[16384] = "";
 
 	if (gamepad)
@@ -474,7 +478,7 @@ static void IN_InitJoystick( void )
 	if (!SDL_WasInit(SDL_INIT_JOYSTICK))
 	{
 		Com_DPrintf("Calling SDL_Init(SDL_INIT_JOYSTICK)...\n");
-		if (SDL_Init(SDL_INIT_JOYSTICK) != 0)
+		if (!SDL_Init(SDL_INIT_JOYSTICK))
 		{
 			Com_DPrintf("SDL_Init(SDL_INIT_JOYSTICK) failed: %s\n", SDL_GetError());
 			return;
@@ -485,7 +489,7 @@ static void IN_InitJoystick( void )
 	if (!SDL_WasInit(SDL_INIT_GAMECONTROLLER))
 	{
 		Com_DPrintf("Calling SDL_Init(SDL_INIT_GAMECONTROLLER)...\n");
-		if (SDL_Init(SDL_INIT_GAMECONTROLLER) != 0)
+		if (!SDL_Init(SDL_INIT_GAMECONTROLLER))
 		{
 			Com_DPrintf("SDL_Init(SDL_INIT_GAMECONTROLLER) failed: %s\n", SDL_GetError());
 			return;
@@ -493,14 +497,16 @@ static void IN_InitJoystick( void )
 		Com_DPrintf("SDL_Init(SDL_INIT_GAMECONTROLLER) passed.\n");
 	}
 
-	total = SDL_NumJoysticks();
+	joysticks = SDL_GetJoysticks(&total);
 	if ( total )
 		Com_Printf("%d possible joysticks\n", total);
 
 	// Print list and build cvar to allow ui to select joystick.
 	for (i = 0; i < total; i++)
 	{
-		Q_strcat(buf, sizeof(buf), SDL_JoystickNameForIndex(i));
+		const char *joyName = SDL_GetJoystickNameForID(joysticks[i]);
+		if (joyName != NULL)
+			Q_strcat(buf, sizeof(buf), joyName);
 		Q_strcat(buf, sizeof(buf), "\n");
 	}
 
@@ -511,6 +517,7 @@ static void IN_InitJoystick( void )
 
 	if( !in_joystick->integer ) {
 		Com_DPrintf( "Joystick is not active.\n" );
+		SDL_free(joysticks);
 		SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER);
 		return;
 	}
@@ -521,18 +528,29 @@ static void IN_InitJoystick( void )
 
 	in_joystickUseAnalog = Cvar_Get( "in_joystickUseAnalog", "0", CVAR_ARCHIVE );
 
-	stick = SDL_JoystickOpen( in_joystickNo->integer );
-
-	if (stick == NULL) {
-		Com_DPrintf( "No joystick opened: %s\n", SDL_GetError() );
+	if( total <= 0 )
+	{
+		SDL_free(joysticks);
 		return;
 	}
 
-	if (SDL_IsGameController(in_joystickNo->integer))
-		gamepad = SDL_GameControllerOpen(in_joystickNo->integer);
+	{
+		SDL_JoystickID joyID = joysticks[in_joystickNo->integer];
 
-	Com_DPrintf( "Joystick %d opened\n", in_joystickNo->integer );
-	Com_DPrintf( "Name:       %s\n", SDL_JoystickNameForIndex(in_joystickNo->integer) );
+		stick = SDL_JoystickOpen( joyID );
+
+		if (stick == NULL) {
+			Com_DPrintf( "No joystick opened: %s\n", SDL_GetError() );
+			SDL_free(joysticks);
+			return;
+		}
+
+		if (SDL_IsGameController(joyID))
+			gamepad = SDL_GameControllerOpen(joyID);
+
+		Com_DPrintf( "Joystick %d opened\n", in_joystickNo->integer );
+		Com_DPrintf( "Name:       %s\n", SDL_GetJoystickNameForID(joyID) );
+	}
 	Com_DPrintf( "Axes:       %d\n", SDL_JoystickNumAxes(stick) );
 	Com_DPrintf( "Hats:       %d\n", SDL_JoystickNumHats(stick) );
 	Com_DPrintf( "Buttons:    %d\n", SDL_JoystickNumButtons(stick) );
@@ -540,8 +558,9 @@ static void IN_InitJoystick( void )
 	Com_DPrintf( "Use Analog: %s\n", in_joystickUseAnalog->integer ? "Yes" : "No" );
 	Com_DPrintf( "Is gamepad: %s\n", gamepad ? "Yes" : "No" );
 
-	SDL_JoystickEventState(SDL_QUERY);
-	SDL_GameControllerEventState(SDL_QUERY);
+	SDL_SetJoystickEventsEnabled(true);
+	SDL_SetGamepadEventsEnabled(true);
+	SDL_free(joysticks);
 }
 
 /*
@@ -1007,10 +1026,16 @@ static void IN_ProcessEvents( void )
 		switch( e.type )
 		{
 			case SDL_KEYDOWN:
+				{
+					iortcw_keysym_t keysym;
+					keysym.scancode = e.key.scancode;
+					keysym.sym = e.key.key;
+					keysym.mod = e.key.mod;
+
 				if ( e.key.repeat && Key_GetCatcher( ) == 0 )
 					break;
 
-				if( ( key = IN_TranslateSDLToQ3Key( &e.key.keysym, qtrue ) ) )
+				if( ( key = IN_TranslateSDLToQ3Key( &keysym, qtrue ) ) )
 					Com_QueueEvent( in_eventTime, SE_KEY, key, qtrue, 0, NULL );
 
 				if( key == K_BACKSPACE )
@@ -1020,18 +1045,26 @@ static void IN_ProcessEvents( void )
 
 				lastKeyDown = key;
 				break;
+				}
 
 			case SDL_KEYUP:
-				if( ( key = IN_TranslateSDLToQ3Key( &e.key.keysym, qfalse ) ) )
+				{
+					iortcw_keysym_t keysym;
+					keysym.scancode = e.key.scancode;
+					keysym.sym = e.key.key;
+					keysym.mod = e.key.mod;
+
+				if( ( key = IN_TranslateSDLToQ3Key( &keysym, qfalse ) ) )
 					Com_QueueEvent( in_eventTime, SE_KEY, key, qfalse, 0, NULL );
 
 				lastKeyDown = 0;
 				break;
+				}
 
 			case SDL_TEXTINPUT:
 				if( lastKeyDown != K_CONSOLE )
 				{
-					char *c = e.text.text;
+					const char *c = e.text.text;
 
 					// Quick and dirty UTF-8 to UTF-32 conversion
 					while( *c )
@@ -1128,45 +1161,47 @@ static void IN_ProcessEvents( void )
 				Cbuf_ExecuteText(EXEC_NOW, "quit Closed window\n");
 				break;
 
-			case SDL_WINDOWEVENT:
-				switch( e.window.event )
+			case SDL_EVENT_WINDOW_RESIZED:
 				{
-					case SDL_WINDOWEVENT_RESIZED:
-						{
-							int width, height;
+					int width, height;
 
-							width = e.window.data1;
-							height = e.window.data2;
+					width = e.window.data1;
+					height = e.window.data2;
 
-							// ignore this event on fullscreen
-							if( cls.glconfig.isFullscreen )
-							{
-								break;
-							}
-
-							// check if size actually changed
-							if( cls.glconfig.vidWidth == width && cls.glconfig.vidHeight == height )
-							{
-								break;
-							}
-
-							Cvar_SetValue( "r_customwidth", width );
-							Cvar_SetValue( "r_customheight", height );
-							Cvar_Set( "r_mode", "-1" );
-
-							// Wait until user stops dragging for 1 second, so
-							// we aren't constantly recreating the GL context while
-							// he tries to drag...
-							vidRestartTime = Sys_Milliseconds( ) + 1000;
-						}
+					// ignore this event on fullscreen
+					if( cls.glconfig.isFullscreen )
+					{
 						break;
+					}
 
-					case SDL_WINDOWEVENT_MINIMIZED:    Cvar_SetValue( "com_minimized", 1 ); break;
-					case SDL_WINDOWEVENT_RESTORED:
-					case SDL_WINDOWEVENT_MAXIMIZED:    Cvar_SetValue( "com_minimized", 0 ); break;
-					case SDL_WINDOWEVENT_FOCUS_LOST:   Cvar_SetValue( "com_unfocused", 1 ); break;
-					case SDL_WINDOWEVENT_FOCUS_GAINED: Cvar_SetValue( "com_unfocused", 0 ); break;
+					// check if size actually changed
+					if( cls.glconfig.vidWidth == width && cls.glconfig.vidHeight == height )
+					{
+						break;
+					}
+
+					Cvar_SetValue( "r_customwidth", width );
+					Cvar_SetValue( "r_customheight", height );
+					Cvar_Set( "r_mode", "-1" );
+
+					// Wait until user stops dragging for 1 second, so
+					// we aren't constantly recreating the GL context while
+					// he tries to drag...
+					vidRestartTime = Sys_Milliseconds( ) + 1000;
 				}
+				break;
+			case SDL_EVENT_WINDOW_MINIMIZED:
+				Cvar_SetValue( "com_minimized", 1 );
+				break;
+			case SDL_EVENT_WINDOW_RESTORED:
+			case SDL_EVENT_WINDOW_MAXIMIZED:
+				Cvar_SetValue( "com_minimized", 0 );
+				break;
+			case SDL_EVENT_WINDOW_FOCUS_LOST:
+				Cvar_SetValue( "com_unfocused", 1 );
+				break;
+			case SDL_EVENT_WINDOW_FOCUS_GAINED:
+				Cvar_SetValue( "com_unfocused", 0 );
 				break;
 
 			default:
@@ -1251,7 +1286,7 @@ void IN_Init( void *windowData )
 	in_joystick = Cvar_Get( "in_joystick", "0", CVAR_ARCHIVE|CVAR_LATCH );
 	in_joystickThreshold = Cvar_Get( "joy_threshold", "0.15", CVAR_ARCHIVE );
 
-	SDL_StartTextInput( );
+	SDL_StartTextInput( SDL_window );
 
 	mouseAvailable = ( in_mouse->value != 0 );
 	IN_DeactivateMouse( Cvar_VariableIntegerValue( "r_fullscreen" ) != 0 );
@@ -1271,7 +1306,7 @@ IN_Shutdown
 */
 void IN_Shutdown( void )
 {
-	SDL_StopTextInput( );
+	SDL_StopTextInput( SDL_window );
 
 	IN_DeactivateMouse( Cvar_VariableIntegerValue( "r_fullscreen" ) != 0 );
 	mouseAvailable = qfalse;

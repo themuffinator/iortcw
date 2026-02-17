@@ -1,0 +1,81 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Meson: Configure Debug",
+      "type": "shell",
+      "command": "meson",
+      "args": [
+        "setup",
+        "build-meson-debug",
+        "--buildtype=debug",
+        "--layout=mirror",
+        "--prefix",
+        "${workspaceFolder}/install",
+        "--bindir",
+        ".",
+        "--libdir",
+        ".",
+        "--reconfigure"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Meson: Build Debug",
+      "type": "shell",
+      "command": "meson",
+      "args": [
+        "install",
+        "-C",
+        "build-meson-debug",
+        "--skip-subprojects"
+      ],
+      "dependsOn": [
+        "Meson: Configure Debug"
+      ],
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Launch: SP Client (Debug Build)",
+      "type": "shell",
+      "command": "${workspaceFolder}/install/ioWolfSP.exe",
+      "options": {
+        "cwd": "${workspaceFolder}/install"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Launch: MP Client (Debug Build)",
+      "type": "shell",
+      "command": "${workspaceFolder}/install/ioWolfMP.exe",
+      "options": {
+        "cwd": "${workspaceFolder}/install"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Launch: SP Dedicated (Debug Build)",
+      "type": "shell",
+      "command": "${workspaceFolder}/install/ioWolfSPDED.exe",
+      "options": {
+        "cwd": "${workspaceFolder}/install"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Launch: MP Dedicated (Debug Build)",
+      "type": "shell",
+      "command": "${workspaceFolder}/install/ioWolfDED.exe",
+      "options": {
+        "cwd": "${workspaceFolder}/install"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

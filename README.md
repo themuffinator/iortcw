@@ -43,6 +43,11 @@ The original id software readme that accompanied the RTCW source release is name
 
 ### Compilation and installation
 
+##### Meson/Ninja (new)
+  1. Run `meson setup build-meson`.
+  2. Run `meson compile -C build-meson`.
+  3. Optional details and feature flags: see `MESON.md`.
+
 ##### For *nix
   1. Change to the directory containing this readme.
   2. Run 'make'.

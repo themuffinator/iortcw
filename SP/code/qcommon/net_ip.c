@@ -24,6 +24,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../qcommon/qcommon.h"
 
 #ifdef _WIN32
+#	ifndef _WINSOCK_DEPRECATED_NO_WARNINGS
+#		define _WINSOCK_DEPRECATED_NO_WARNINGS
+#	endif
 #	include <winsock2.h>
 #	include <ws2tcpip.h>
 #	if WINVER < 0x501
@@ -46,10 +49,18 @@ typedef int socklen_t;
 typedef unsigned short sa_family_t;
 #	endif
 
-#	define EAGAIN					WSAEWOULDBLOCK
-#	define EADDRNOTAVAIL	WSAEADDRNOTAVAIL
-#	define EAFNOSUPPORT		WSAEAFNOSUPPORT
-#	define ECONNRESET			WSAECONNRESET
+#	ifndef EAGAIN
+#		define EAGAIN					WSAEWOULDBLOCK
+#	endif
+#	ifndef EADDRNOTAVAIL
+#		define EADDRNOTAVAIL	WSAEADDRNOTAVAIL
+#	endif
+#	ifndef EAFNOSUPPORT
+#		define EAFNOSUPPORT		WSAEAFNOSUPPORT
+#	endif
+#	ifndef ECONNRESET
+#		define ECONNRESET			WSAECONNRESET
+#	endif
 typedef u_long	ioctlarg_t;
 #	define socketError		WSAGetLastError( )
 

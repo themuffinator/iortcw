@@ -1,0 +1,159 @@
+option('build_sp',
+  type: 'boolean',
+  value: true,
+  description: 'Build single-player binaries and modules')
+
+option('build_mp',
+  type: 'boolean',
+  value: true,
+  description: 'Build multi-player binaries and modules')
+
+option('build_client',
+  type: 'boolean',
+  value: true,
+  description: 'Build client executables and renderers')
+
+option('build_server',
+  type: 'boolean',
+  value: true,
+  description: 'Build dedicated server executables')
+
+option('build_game_so',
+  type: 'boolean',
+  value: true,
+  description: 'Build game shared modules (.so/.dll/.dylib)')
+
+option('build_renderer_rend2',
+  type: 'boolean',
+  value: true,
+  description: 'Build rend2 renderer target')
+
+option('use_renderer_dlopen',
+  type: 'boolean',
+  value: true,
+  description: 'Build renderer as loadable shared library')
+
+option('use_bloom',
+  type: 'boolean',
+  value: true,
+  description: 'Enable bloom renderer code')
+
+option('use_openal',
+  type: 'boolean',
+  value: true,
+  description: 'Enable OpenAL backend')
+
+option('use_openal_dlopen',
+  type: 'boolean',
+  value: true,
+  description: 'Dynamically load OpenAL at runtime instead of linking')
+
+option('sp_curl',
+  type: 'boolean',
+  value: false,
+  description: 'Enable libcurl support in SP build')
+
+option('mp_curl',
+  type: 'boolean',
+  value: true,
+  description: 'Enable libcurl support in MP build')
+
+option('use_curl_dlopen',
+  type: 'boolean',
+  value: true,
+  description: 'Dynamically load libcurl at runtime instead of linking')
+
+option('use_codec_vorbis',
+  type: 'boolean',
+  value: true,
+  description: 'Enable Ogg Vorbis codec support')
+
+option('use_codec_opus',
+  type: 'boolean',
+  value: true,
+  description: 'Enable Ogg Opus codec support')
+
+option('use_voip',
+  type: 'boolean',
+  value: true,
+  description: 'Enable built-in VoIP support')
+
+option('use_mumble',
+  type: 'boolean',
+  value: true,
+  description: 'Enable Mumble support')
+
+option('use_freetype',
+  type: 'boolean',
+  value: true,
+  description: 'Enable FreeType text rendering')
+
+option('use_internal_codecs',
+  type: 'boolean',
+  value: false,
+  description: 'Deprecated: internal codec sources are no longer used; dependencies are resolved via wraps/subprojects')
+
+option('use_internal_zlib',
+  type: 'boolean',
+  value: false,
+  description: 'Deprecated: internal zlib sources are no longer used; dependency is resolved via wraps/subprojects')
+
+option('use_internal_jpeg',
+  type: 'boolean',
+  value: false,
+  description: 'Deprecated: internal JPEG sources are no longer used; dependency is resolved via wraps/subprojects')
+
+option('use_internal_freetype',
+  type: 'boolean',
+  value: false,
+  description: 'Deprecated: internal FreeType sources are no longer used; dependency is resolved via wraps/subprojects')
+
+option('use_local_headers',
+  type: 'boolean',
+  value: false,
+  description: 'Prefer system/wrapped dependency headers')
+
+option('use_xdg',
+  type: 'boolean',
+  value: false,
+  description: 'Enable XDG paths')
+
+option('build_standalone',
+  type: 'boolean',
+  value: false,
+  description: 'Build standalone binaries')
+
+option('use_authorize_server',
+  type: 'boolean',
+  value: false,
+  description: 'Enable authorize server support')
+
+option('use_antiwallhack',
+  type: 'boolean',
+  value: false,
+  description: 'Enable MP antiwallhack source path')
+
+option('have_vm_compiled',
+  type: 'boolean',
+  value: true,
+  description: 'Enable native VM JIT helpers for supported architectures')
+
+option('default_basedir',
+  type: 'string',
+  value: '',
+  description: 'Override DEFAULT_BASEDIR define')
+
+option('basegame',
+  type: 'string',
+  value: 'main',
+  description: 'Base game directory name')
+
+option('version_sp',
+  type: 'string',
+  value: '1.51d-SP',
+  description: 'PRODUCT_VERSION string for SP build')
+
+option('version_mp',
+  type: 'string',
+  value: '1.51d-MP',
+  description: 'PRODUCT_VERSION string for MP build')

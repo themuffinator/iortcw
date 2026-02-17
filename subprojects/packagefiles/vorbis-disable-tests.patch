@@ -1,0 +1,9 @@
+diff --git a/meson.build b/meson.build
+index eb05637..b4db1af 100644
+--- a/meson.build
++++ b/meson.build
+@@ -34,4 +34,3 @@ if host_machine.system() != 'windows'
+   # These don't seem to build on Windows.
+   subdir('vq')
+ endif
+-subdir('test')

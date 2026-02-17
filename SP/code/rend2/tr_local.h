@@ -53,7 +53,7 @@ QGL_EXT_direct_state_access_PROCS;
 #define GL_INDEX_TYPE		GL_UNSIGNED_INT
 typedef unsigned int glIndex_t;
 
-#define BUFFER_OFFSET(i) ((char *)NULL + (i))
+#define BUFFER_OFFSET(i) ((void *)(uintptr_t)(i))
 
 // 11 bits
 // can't be increased without changing bit packing for drawsurfs

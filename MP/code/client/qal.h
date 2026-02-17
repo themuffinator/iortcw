@@ -37,14 +37,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../AL/al.h"
 #include "../AL/alc.h"
 #else
-#ifdef _MSC_VER
-  // MSVC users must install the OpenAL SDK which doesn't use the AL/*.h scheme.
-  #include <al.h>
-  #include <alc.h>
-#else
-  #include <AL/al.h>
-  #include <AL/alc.h>
-#endif
+#include <AL/al.h>
+#include <AL/alc.h>
 #endif
 
 /* Hack to enable compiling both on OpenAL SDK and OpenAL-soft. */

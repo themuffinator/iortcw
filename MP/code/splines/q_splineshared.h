@@ -120,13 +120,13 @@ If you have questions concerning this license or the applicable additional terms
 #endif
 
 //Ignore __attribute__ on non-gcc platforms
-#ifndef __GNUC__
+#if !defined(__GNUC__) && !defined(__clang__)
 #ifndef __attribute__
 #define __attribute__(x)
 #endif
 #endif
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
 #define UNUSED_VAR __attribute__((unused))
 #else
 #define UNUSED_VAR
@@ -176,21 +176,31 @@ typedef int intptr_t;
 #include <ctype.h>
 #include <limits.h>
 
-#ifdef _MSC_VER
-  #include <io.h>
+	#ifdef _MSC_VER
+	  #include <io.h>
 
-  typedef __int64 int64_t;
-  typedef __int32 int32_t;
-  typedef __int16 int16_t;
-  typedef __int8 int8_t;
-  typedef unsigned __int64 uint64_t;
-  typedef unsigned __int32 uint32_t;
-  typedef unsigned __int16 uint16_t;
-  typedef unsigned __int8 uint8_t;
+	  #if _MSC_VER < 1600
+	    typedef __int64 int64_t;
+	    typedef __int32 int32_t;
+	    typedef __int16 int16_t;
+	    typedef __int8 int8_t;
+	    typedef unsigned __int64 uint64_t;
+	    typedef unsigned __int32 uint32_t;
+	    typedef unsigned __int16 uint16_t;
+	    typedef unsigned __int8 uint8_t;
+	  #else
+	    #include <stdint.h>
+	  #endif
 
-  // vsnprintf is ISO/IEC 9899:1999
-  // abstracting this to make it portable
-  int Q_vsnprintf(char *str, size_t size, const char *format, va_list ap);
+	  // vsnprintf is ISO/IEC 9899:1999
+	  // abstracting this to make it portable
+	  #ifdef __cplusplus
+	  extern "C" {
+	  #endif
+	  int Q_vsnprintf(char *str, size_t size, const char *format, va_list ap);
+	  #ifdef __cplusplus
+	  }
+	  #endif
 #else
   #include <stdint.h>
 

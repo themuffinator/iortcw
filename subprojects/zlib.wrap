@@ -1,0 +1,9 @@
+[wrap-git]
+directory = zlib-1.3.2
+url = https://github.com/madler/zlib.git
+revision = da607da739fa6047df13e66a2af6b8bec7c2a498
+depth = 1
+patch_directory = zlib
+
+[provide]
+dependency_names = zlib

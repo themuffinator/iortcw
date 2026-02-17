@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug: SP Client (Meson Install)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/install/ioWolfSP.exe",
+      "cwd": "${workspaceFolder}/install",
+      "args": [],
+      "stopAtEntry": false,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Debug: MP Client (Meson Install)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/install/ioWolfMP.exe",
+      "cwd": "${workspaceFolder}/install",
+      "args": [],
+      "stopAtEntry": false,
+      "console": "integratedTerminal"
+    }
+  ]
+}

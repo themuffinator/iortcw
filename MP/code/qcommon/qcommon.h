@@ -33,7 +33,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "../qcommon/cm_public.h"
 
 //Ignore __attribute__ on non-gcc platforms
-#ifndef __GNUC__
+#if !defined(__GNUC__) && !defined(__clang__)
 #ifndef __attribute__
 #define __attribute__(x)
 #endif

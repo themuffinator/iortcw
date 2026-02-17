@@ -46,8 +46,8 @@ If you have questions concerning this license or the applicable additional terms
   #include "../opus-1.2.1/include/opus.h"
   #include "../opusfile-0.9/include/opusfile.h"
 #else
-  #include <opus/opus.h>
-  #include <opus/opusfile.h>
+  #include <opus.h>
+  #include <opusfile.h>
 #endif
 #endif
 

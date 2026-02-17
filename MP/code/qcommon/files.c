@@ -38,7 +38,7 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "q_shared.h"
 #include "qcommon.h"
-#include "../zlib-1.2.11/unzip.h"
+#include "../minizip/unzip.h"
 
 /*
 =============================================================================
@@ -3555,6 +3555,71 @@ static void FS_ReorderPurePaks( void ) {
 
 }
 
+#ifndef STANDALONE
+static qboolean FS_PathHasGamePak0( const char *basePath, const char *gameName ) {
+	char pakPath[MAX_OSPATH];
+	int len;
+
+	if ( !basePath || !basePath[0] || !gameName || !gameName[0] ) {
+		return qfalse;
+	}
+
+	len = Com_sprintf( pakPath, sizeof( pakPath ), "%s%c%s%cpak0.pk3",
+		basePath, PATH_SEP, gameName, PATH_SEP );
+	if ( len >= sizeof( pakPath ) ) {
+		return qfalse;
+	}
+
+	return FS_FileInPathExists( pakPath );
+}
+
+static qboolean FS_PathHasGameData( const char *basePath, const char *gameName ) {
+	if ( !gameName || !gameName[0] ) {
+		return FS_PathHasGamePak0( basePath, BASEGAME );
+	}
+
+	if ( FS_PathHasGamePak0( basePath, gameName ) ) {
+		return qtrue;
+	}
+
+	if ( Q_stricmp( gameName, BASEGAME ) && FS_PathHasGamePak0( basePath, BASEGAME ) ) {
+		return qtrue;
+	}
+
+	return qfalse;
+}
+#endif
+
+static const char *FS_DefaultBasePath( const char *gameName ) {
+	const char *defaultInstallPath = Sys_DefaultInstallPath();
+	const char *detectedPath;
+
+	if ( !defaultInstallPath ) {
+		defaultInstallPath = "";
+	}
+
+	detectedPath = defaultInstallPath;
+
+#ifndef STANDALONE
+	if ( !FS_PathHasGameData( detectedPath, gameName ) ) {
+		const char *steamPath = Sys_SteamPath();
+		const char *gogPath = Sys_GogPath();
+
+		if ( FS_PathHasGameData( steamPath, gameName ) ) {
+			detectedPath = steamPath;
+		} else if ( FS_PathHasGameData( gogPath, gameName ) ) {
+			detectedPath = gogPath;
+		}
+	}
+
+	if ( detectedPath[0] && Q_stricmp( detectedPath, defaultInstallPath ) ) {
+		Com_Printf( "Auto-detected game installation path for fs_basepath: %s\n", detectedPath );
+	}
+#endif
+
+	return detectedPath;
+}
+
 /*
 ================
 FS_Startup
@@ -3562,13 +3627,16 @@ FS_Startup
 */
 static void FS_Startup( const char *gameName ) {
 	const char *homePath;
+	const char *defaultBasePath;
+	const char *binaryPath;
 
 	Com_Printf( "----- FS_Startup -----\n" );
 
 	fs_packFiles = 0;
 
 	fs_debug = Cvar_Get( "fs_debug", "0", 0 );
-	fs_basepath = Cvar_Get ("fs_basepath", Sys_DefaultInstallPath(), CVAR_INIT|CVAR_PROTECTED );
+	defaultBasePath = FS_DefaultBasePath( gameName );
+	fs_basepath = Cvar_Get ("fs_basepath", defaultBasePath, CVAR_INIT|CVAR_PROTECTED );
 	fs_basegame = Cvar_Get( "fs_basegame", "", CVAR_INIT );
 	homePath = Sys_DefaultHomePath();
 	if (!homePath || !homePath[0]) {
@@ -3615,6 +3683,11 @@ static void FS_Startup( const char *gameName ) {
 		FS_AddGameDirectory( fs_basepath->string, gameName, qtrue );
 	}
 
+	binaryPath = Sys_DefaultInstallPath();
+	if ( binaryPath && binaryPath[0] ) {
+		FS_AddGameDirectory( binaryPath, gameName, qtrue );
+	}
+
 #ifdef __APPLE__
 	fs_apppath = Cvar_Get ("fs_apppath", Sys_DefaultAppPath(), CVAR_INIT|CVAR_PROTECTED );
 	// Make MacOSX also include the base path included with the .app bundle
@@ -3644,6 +3717,10 @@ static void FS_Startup( const char *gameName ) {
 			FS_AddGameDirectory( fs_basepath->string, fs_basegame->string, qtrue );
 		}
 
+		if ( binaryPath && binaryPath[0] ) {
+			FS_AddGameDirectory( binaryPath, fs_basegame->string, qtrue );
+		}
+
 		if ( fs_homepath->string[0] && Q_stricmp( fs_homepath->string,fs_basepath->string ) ) {
 			FS_AddGameDirectory( fs_homepath->string, fs_basegame->string, qtrue );
 		}
@@ -3663,6 +3740,10 @@ static void FS_Startup( const char *gameName ) {
 
 		if ( fs_basepath->string[0] ) {
 			FS_AddGameDirectory( fs_basepath->string, fs_gamedirvar->string, qtrue );
+		}
+
+		if ( binaryPath && binaryPath[0] ) {
+			FS_AddGameDirectory( binaryPath, fs_gamedirvar->string, qtrue );
 		}
 
 		if ( fs_homepath->string[0] && Q_stricmp( fs_homepath->string,fs_basepath->string ) ) {

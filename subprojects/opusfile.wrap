@@ -1,0 +1,9 @@
+[wrap-git]
+directory = opusfile-0.12
+url = https://github.com/xiph/opusfile.git
+revision = a55c164e9891a9326188b7d4d216ec9a88373739
+depth = 1
+patch_directory = opusfile
+
+[provide]
+dependency_names = opusfile

@@ -32,13 +32,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <errno.h>
 
 #ifndef DEDICATED
-#ifdef USE_LOCAL_HEADERS
-#	include "SDL.h"
-#	include "SDL_cpuinfo.h"
-#else
-#	include <SDL.h>
-#	include <SDL_cpuinfo.h>
-#endif
+#	include <SDL3/SDL.h>
+#	include <SDL3/SDL_cpuinfo.h>
 #endif
 
 #include "sys_local.h"
@@ -321,8 +316,6 @@ cpuFeatures_t Sys_GetProcessorFeatures( void )
 	cpuFeatures_t features = 0;
 
 #ifndef DEDICATED
-	if( SDL_HasRDTSC( ) )	features |= CF_RDTSC;
-	if( SDL_Has3DNow( ) )	features |= CF_3DNOW;
 	if( SDL_HasMMX( ) )	features |= CF_MMX;
 	if( SDL_HasSSE( ) )	features |= CF_SSE;
 	if( SDL_HasSSE2( ) )	features |= CF_SSE2;
@@ -602,8 +595,8 @@ void *Sys_LoadGameDll(const char *name,
 		return NULL;
 	}
 
-	dllEntry = Sys_LoadFunction( libHandle, "dllEntry" );
-	*entryPoint = Sys_LoadFunction( libHandle, "vmMain" );
+	dllEntry = (void (*)(intptr_t (*)(intptr_t, ...))) Sys_LoadFunction( libHandle, "dllEntry" );
+	*entryPoint = (vmMainProc) Sys_LoadFunction( libHandle, "vmMain" );
 
 	if ( !*entryPoint || !dllEntry )
 	{
@@ -700,20 +693,22 @@ int main( int argc, char **argv )
 #	endif
 
 	// Run time
-	SDL_version ver;
-	SDL_GetVersion( &ver );
+	int ver = SDL_GetVersion();
 
 #define MINSDL_VERSION \
 	XSTRING(MINSDL_MAJOR) "." \
 	XSTRING(MINSDL_MINOR) "." \
 	XSTRING(MINSDL_PATCH)
 
-	if( SDL_VERSIONNUM( ver.major, ver.minor, ver.patch ) <
+	if( ver <
 			SDL_VERSIONNUM( MINSDL_MAJOR, MINSDL_MINOR, MINSDL_PATCH ) )
 	{
 		Sys_Dialog( DT_ERROR, va( "SDL version " MINSDL_VERSION " or greater is required, "
 			"but only version %d.%d.%d was found. You may be able to obtain a more recent copy "
-			"from http://www.libsdl.org/.", ver.major, ver.minor, ver.patch ), "SDL Library Too Old" );
+			"from http://www.libsdl.org/.",
+			SDL_VERSIONNUM_MAJOR( ver ),
+			SDL_VERSIONNUM_MINOR( ver ),
+			SDL_VERSIONNUM_MICRO( ver ) ), "SDL Library Too Old" );
 
 		Sys_Exit( 1 );
 	}
